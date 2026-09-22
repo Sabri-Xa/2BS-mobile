@@ -7,6 +7,25 @@ import streamlit as st
 # Configuration pour un affichage optimal sur téléphone
 st.set_page_config(page_title="2BS Transport Mobile", layout="centered", initial_sidebar_state="collapsed")
 
+# --- CORRECTIF GLOBAL DE LA TAILLE DE POLICE (MOBILE) ---
+st.markdown("""
+<style>
+    /* Force une police bien lisible partout sur le téléphone */
+    html, body, [class*="css"] {
+        font-size: 18px !important;
+    }
+    .stMarkdown p, .stMarkdown li, span, label {
+        font-size: 18px !important;
+    }
+    .stButton>button {
+        width: 100%;
+        height: 55px;
+        font-weight: bold;
+        font-size: 20px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- GESTION DE LA CLÉ API SÉCURISÉE ---
 try:
     ORS_API_KEY = st.secrets["ORS_API_KEY"]
@@ -53,12 +72,6 @@ def set_background(image_file):
                 background-position: center;
                 background-attachment: fixed;
             }}
-            .stButton>button {{
-                width: 100%;
-                height: 55px;
-                font-weight: bold;
-                font-size: 20px;
-            }}
             </style>
             """,
             unsafe_allow_html=True
@@ -66,7 +79,7 @@ def set_background(image_file):
 
 set_background("Logo 2BS.jpg")
 
-st.markdown("<h2 style='text-align: center; font-size: 28px;'>🚛 2BS Transport Mobile</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; font-size: 26px;'>🚛 2BS Transport Mobile</h2>", unsafe_allow_html=True)
 
 # Initialisation mémoire
 if "distance_km" not in st.session_state: st.session_state.distance_km = 0.0
@@ -132,8 +145,12 @@ def calculer_route(depart, liste_arrivees):
         for i in range(len(pts) - 1):
             p1, p2 = pts[i], pts[i+1]
             
+            # Demande explicite en français ("language": "fr")
             url_ors = "https://api.openrouteservice.org/v2/directions/driving-hgv/geojson"
-            body = {"coordinates": [[p1['lon'], p1['lat']], [p2['lon'], p2['lat']]]}
+            body = {
+                "coordinates": [[p1['lon'], p1['lat']], [p2['lon'], p2['lat']]],
+                "language": "fr"
+            }
             
             rep = requests.post(url_ors, json=body, headers=headers, timeout=10)
             if rep.status_code == 200:
@@ -143,7 +160,7 @@ def calculer_route(depart, liste_arrivees):
                 dur = summary["duration"] / 3600.0
                 coords = data["features"][0]["geometry"]["coordinates"]
                 
-                # Récupération des instructions détaillées (turn-by-turn)
+                # Récupération sécurisée des instructions détaillées en français
                 steps_list = []
                 try:
                     ors_segments = data["features"][0]["properties"].get("segments", [])
@@ -238,7 +255,8 @@ with tab2:
         assurance_mensuel = st.number_input("Assurances", value=config.get("assurance_mensuel", 0.0), step=50.0)
         frais_divers = st.number_input("Frais divers (Comptable, GSM, GPS)", value=config.get("abo_mensuel", 0.0), step=50.0)
 
-    marge_pourcent = st.slider("Marge souhaitée (%)", 0, 50, config.get("marge_pourcent", 20))
+    # Remplacement du curseur (slider) par un champ numérique fixe pour éviter les mouvements lors du scroll mobile
+    marge_pourcent = st.number_input("Marge souhaitée (%)", min_value=0, max_value=100, value=int(config.get("marge_pourcent", 20)), step=1)
     
     current_config = {
         "prix_diesel": prix_diesel_input, "prix_adblue": prix_adblue_input, "saisie_ttc": saisie_ttc,
@@ -272,6 +290,15 @@ with tab2:
     col1.metric("PRK de la course", f"{prk_total:.2f} €")
     col2.metric("Marge Nette", f"{facture_htva - prk_total:.2f} €")
 
+    # Ajout des détails complets du calcul PRK
+    with st.expander("📊 Voir le détail complet des coûts (PRK)"):
+        st.markdown(f"• **Carburant :** {c_carburant:.2f} €")
+        st.markdown(f"• **AdBlue :** {c_adblue:.2f} €")
+        st.markdown(f"• **Usure & Pneumatiques :** {c_usure:.2f} €")
+        st.markdown(f"• **Péage (Viapass) :** {c_viapass:.2f} €")
+        st.markdown(f"• **Coût Chauffeur :** {c_chauffeur:.2f} €")
+        st.markdown(f"• **Frais Fixes (Prorata) :** {c_fixes:.2f} €")
+
 with tab3:
     st.markdown("### 🚀 Exporter pour le GPS Camion")
     
@@ -291,33 +318,32 @@ with tab3:
         )
         
         st.markdown("---")
-        st.markdown("<div style='font-size: 22px; font-weight: bold; margin-bottom: 10px;'>Rappel détaillé de la tournée :</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-weight: bold; margin-bottom: 10px;'>Rappel détaillé de la tournée :</div>", unsafe_allow_html=True)
         
         for i, seg in enumerate(st.session_state.segments):
             dur_h = int(seg.get('dur', 0))
             dur_m = int(round((seg.get('dur', 0) - dur_h) * 60))
             dur_str = f"{dur_h}h{dur_m:02d}" if dur_h > 0 else f"{dur_m} min"
             
-            # Bloc principal géant (Styles 100% intégrés pour forcer la taille sur mobile)
             st.markdown(
                 f"""
-                <div style='padding: 18px; background: white; color: black; border-radius: 12px; border-left: 12px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);'>
-                    <div style='font-size: 24px; font-weight: bold; margin-bottom: 8px;'>Étape {i+1}</div>
-                    <div style='font-size: 20px; margin-bottom: 4px;'><b>Départ :</b> {seg['depart']}</div>
-                    <div style='font-size: 20px; margin-bottom: 8px;'><b>Arrivée :</b> {seg['arrivee']}</div>
-                    <div style='font-size: 20px; font-weight: bold; color: #004085; margin-top: 10px;'>
+                <div style='padding: 16px; background: white; color: black; border-radius: 12px; border-left: 12px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);'>
+                    <div style='font-weight: bold; margin-bottom: 6px;'>Étape {i+1}</div>
+                    <div style='margin-bottom: 4px;'><b>Départ :</b> {seg['depart']}</div>
+                    <div style='margin-bottom: 6px;'><b>Arrivée :</b> {seg['arrivee']}</div>
+                    <div style='font-weight: bold; color: #004085; margin-top: 8px;'>
                         🛣️ {seg['dist']:.1f} km &nbsp;&nbsp;|&nbsp;&nbsp; ⏱️ {dur_str}
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
             
-            # Détails pas à pas de l'itinéraire
+            # Détails pas à pas de l'itinéraire en français
             if seg.get("steps"):
                 with st.expander(f"🔍 Détail de la route (Étape {i+1})"):
                     for step in seg["steps"]:
                         st.markdown(
-                            f"""<div style='font-size: 18px; color: black; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px;'>
+                            f"""<div style='color: black; margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 4px;'>
                                 🔹 {step['instruction']} <b style='color: #333;'>({step['dist']:.1f} km)</b>
                             </div>""", 
                             unsafe_allow_html=True
