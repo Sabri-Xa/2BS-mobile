@@ -7,11 +7,29 @@ import streamlit as st
 # Configuration pour un affichage optimal sur téléphone
 st.set_page_config(page_title="2BS Transport Mobile", layout="centered", initial_sidebar_state="collapsed")
 
+# --- STYLE CSS GLOBAL POUR AGRANDIR LA POLICE SUR MOBILE ---
+st.markdown("""
+<style>
+    /* Forcer une grande police lisible sur mobile */
+    .route-card, .route-card * {
+        font-size: 21px !important;
+        line-height: 1.5 !important;
+    }
+    .route-title {
+        font-size: 25px !important;
+        font-weight: bold !important;
+    }
+    .step-text {
+        font-size: 18px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- GESTION DE LA CLÉ API SÉCURISÉE ---
 try:
     ORS_API_KEY = st.secrets["ORS_API_KEY"]
 except:
-    ORS_API_KEY = "" # Sécurité si la clé n'est pas encore configurée
+    ORS_API_KEY = ""
 
 # --- GESTION DE LA SAUVEGARDE AUTOMATIQUE ---
 CONFIG_FILE = "config_mobile.json"
@@ -29,10 +47,7 @@ def load_config():
         "saisie_ttc": True,
         "leasing_mensuel": 0.0, 
         "assurance_mensuel": 0.0,
-        "comptable_mensuel": 0.0,
         "abo_mensuel": 0.0,
-        "tel_mensuel": 0.0,
-        "impots_mensuel": 0.0,
         "marge_pourcent": 20
     }
 
@@ -58,9 +73,9 @@ def set_background(image_file):
             }}
             .stButton>button {{
                 width: 100%;
-                height: 50px;
+                height: 55px;
                 font-weight: bold;
-                font-size: 18px;
+                font-size: 20px;
             }}
             </style>
             """,
@@ -141,16 +156,31 @@ def calculer_route(depart, liste_arrivees):
             rep = requests.post(url_ors, json=body, headers=headers, timeout=10)
             if rep.status_code == 200:
                 data = rep.json()
-                dist = data["features"][0]["properties"]["summary"]["distance"] / 1000.0
-                dur = data["features"][0]["properties"]["summary"]["duration"] / 3600.0
+                summary = data["features"][0]["properties"]["summary"]
+                dist = summary["distance"] / 1000.0
+                dur = summary["duration"] / 3600.0
                 coords = data["features"][0]["geometry"]["coordinates"]
                 
+                # Récupération des instructions détaillées (turn-by-turn)
+                steps_list = []
+                try:
+                    ors_segments = data["features"][0]["properties"].get("segments", [])
+                    for seg_item in ors_segments:
+                        for step in seg_item.get("steps", []):
+                            steps_list.append({
+                                "instruction": step.get("instruction", ""),
+                                "dist": step.get("distance", 0) / 1000.0,
+                                "dur": step.get("duration", 0) / 60.0
+                            })
+                except:
+                    pass
+
                 tot_dist += dist
                 tot_dur += dur
                 segs.append({
                     "depart": p1["nom"], "arrivee": p2["nom"],
                     "dist": dist, "dur": dur, "couleur": palette[i % len(palette)],
-                    "coords": coords
+                    "coords": coords, "steps": steps_list
                 })
             else:
                 return None, None, ["Erreur avec la clé API ou le serveur ORS."], [], []
@@ -280,21 +310,29 @@ with tab3:
         )
         
         st.markdown("---")
-        st.markdown("**Rappel de la tournée :**")
+        st.markdown("**Rappel détaillé de la tournée :**")
+        
         for i, seg in enumerate(st.session_state.segments):
             dur_h = int(seg.get('dur', 0))
             dur_m = int(round((seg.get('dur', 0) - dur_h) * 60))
             dur_str = f"{dur_h}h{dur_m:02d}" if dur_h > 0 else f"{dur_m} min"
             
+            # Carte principale de l'étape en grand format
             st.markdown(
                 f"""
-                <div style='padding: 14px; background: white; color: black; border-radius: 10px; border-left: 8px solid {seg['couleur']}; margin-bottom: 12px; box-shadow: 0px 3px 6px rgba(0,0,0,0.15); font-size: 16px;'>
-                    <strong style='font-size: 18px;'>Étape {i+1}</strong> <br>
-                    <b>De :</b> {seg['depart']} <br>
-                    <b>À :</b> {seg['arrivee']} <br>
-                    <div style='margin-top: 6px; font-weight: bold;'>
+                <div class="route-card" style='padding: 16px; background: white; color: black; border-radius: 12px; border-left: 10px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.15);'>
+                    <div class="route-title">Étape {i+1}</div>
+                    <div><b>Départ :</b> {seg['depart']}</div>
+                    <div><b>Arrivée :</b> {seg['arrivee']}</div>
+                    <div style='margin-top: 8px; font-weight: bold; color: #004085;'>
                         🛣️ {seg['dist']:.1f} km &nbsp;&nbsp;|&nbsp;&nbsp; ⏱️ {dur_str}
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
+            
+            # Affichage des instructions détaillées de l'étape dans un expander bien lisible
+            if seg.get("steps"):
+                with st.expander(f"🔍 Détail de la route (Étape {i+1})"):
+                    for step in seg["steps"]:
+                        st.markdown(f"<span class='step-text'>• {step['instruction']} ({step['dist']:.1f} km)</span>", unsafe_allow_html=True)
