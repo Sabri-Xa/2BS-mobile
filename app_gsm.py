@@ -208,7 +208,8 @@ with tab1:
                     st.session_state.points_valides = pts
                     st.success(f"✅ OK : {dist_calc} km | {st.session_state.h_val}h{st.session_state.m_val:02d}")
                 else:
-                    st.error("Erreur lors du calcul (vérifiez vos adresses).")
+                    # Affiche la vraie erreur renvoyée par le code
+                    st.error(f"Erreur de calcul : {', '.join(errs)}")
 
 with tab2:
     st.markdown("### 2. Paramètres & Prix (HTVA)")
