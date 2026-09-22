@@ -195,21 +195,20 @@ with tab1:
         st.rerun()
 
     if st.button("🔍 Calculer & Optimiser", type="primary"):
-        if not ORS_API_KEY:
-            st.error("⚠️ La clé API OpenRouteService manque dans les paramètres secrets !")
-        else:
-            with st.spinner("Calcul itinéraire camion en cours..."):
-                dist_calc, temps_calc, errs, segs, pts = calculer_route(ville_depart, st.session_state.destinations)
-                if dist_calc is not None:
-                    st.session_state.distance_km = dist_calc
-                    st.session_state.h_val = int(temps_calc)
-                    st.session_state.m_val = int(round((temps_calc - int(temps_calc)) * 60))
-                    st.session_state.segments = segs
-                    st.session_state.points_valides = pts
-                    st.success(f"✅ OK : {dist_calc} km | {st.session_state.h_val}h{st.session_state.m_val:02d}")
-                else:
-                    st.error("Erreur lors du calcul (vérifiez vos adresses).")
-
+    if not ORS_API_KEY:
+        st.error("⚠️ La clé API OpenRouteService manque dans les paramètres secrets !")
+    else:
+        with st.spinner("Calcul itinéraire camion en cours..."):
+            dist_calc, temps_calc, errs, segs, pts = calculer_route(ville_depart, st.session_state.destinations)
+            if dist_calc is not None:
+                st.session_state.distance_km = dist_calc
+                st.session_state.h_val = int(temps_calc)
+                st.session_state.m_val = int(round((temps_calc - int(temps_calc)) * 60))
+                st.session_state.segments = segs
+                st.session_state.points_valides = pts
+                st.success(f"✅ OK : {dist_calc} km | {st.session_state.h_val}h{st.session_state.m_val:02d}")
+            else:
+                st.error(f"Détail de l'erreur : {errs}")
 with tab2:
     st.markdown("### 2. Paramètres & Prix (HTVA)")
     
