@@ -3,28 +3,86 @@ import requests
 import base64
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Configuration pour un affichage optimal sur téléphone
 st.set_page_config(page_title="2BS Transport Mobile", layout="centered", initial_sidebar_state="collapsed")
 
-# --- CORRECTIF GLOBAL DE LA TAILLE DE POLICE (MOBILE) ---
+# --- CORRECTIF GLOBAL DE LA TAILLE DE POLICE (ENCORE PLUS GRAND) ---
 st.markdown("""
 <style>
-    /* Force une police bien lisible partout sur le téléphone */
+    /* Force une police géante et ultra-lisible partout sur le téléphone */
     html, body, [class*="css"] {
-        font-size: 18px !important;
+        font-size: 22px !important;
     }
     .stMarkdown p, .stMarkdown li, span, label {
-        font-size: 18px !important;
+        font-size: 22px !important;
     }
     .stButton>button {
         width: 100%;
-        height: 55px;
+        height: 60px;
         font-weight: bold;
-        font-size: 20px !important;
+        font-size: 24px !important;
+    }
+    input, select, .st-bh, .st-bb {
+        font-size: 22px !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- SCRIPT JAVASCRIPT POUR LE SWIPE (GLISSER DROITE/GAUCHE) ---
+# Ce script détecte les mouvements du doigt sur l'écran du téléphone
+swipe_js = """
+<script>
+    const doc = window.parent.document;
+    let touchstartX = 0;
+    let touchstartY = 0;
+    let touchendX = 0;
+    let touchendY = 0;
+
+    function checkDirection() {
+        const thresholdX = 60; // Distance minimum pour considérer que c'est un swipe horizontal
+        const diffX = touchendX - touchstartX;
+        const diffY = touchendY - touchstartY;
+
+        // On s'assure que c'est un mouvement horizontal et pas un défilement vers le bas
+        if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > thresholdX) {
+            if (diffX < 0) {
+                // Swipe vers la gauche (Onglet suivant)
+                switchTab(1);
+            } else {
+                // Swipe vers la droite (Onglet précédent)
+                switchTab(-1);
+            }
+        }
+    }
+
+    function switchTab(direction) {
+        const tabs = Array.from(doc.querySelectorAll('button[role="tab"]'));
+        if (tabs.length === 0) return;
+        
+        let activeIndex = tabs.findIndex(tab => tab.getAttribute('aria-selected') === 'true');
+        if (activeIndex === -1) return;
+        
+        let newIndex = activeIndex + direction;
+        if (newIndex >= 0 && newIndex < tabs.length) {
+            tabs[newIndex].click();
+        }
+    }
+
+    doc.addEventListener('touchstart', e => {
+        touchstartX = e.changedTouches[0].screenX;
+        touchstartY = e.changedTouches[0].screenY;
+    }, {passive: true});
+
+    doc.addEventListener('touchend', e => {
+        touchendX = e.changedTouches[0].screenX;
+        touchendY = e.changedTouches[0].screenY;
+        checkDirection();
+    }, {passive: true});
+</script>
+"""
+components.html(swipe_js, height=0, width=0)
 
 # --- GESTION DE LA CLÉ API SÉCURISÉE ---
 try:
@@ -79,7 +137,7 @@ def set_background(image_file):
 
 set_background("Logo 2BS.jpg")
 
-st.markdown("<h2 style='text-align: center; font-size: 26px;'>🚛 2BS Transport Mobile</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; font-size: 30px;'>🚛 2BS Transport</h2>", unsafe_allow_html=True)
 
 # Initialisation mémoire
 if "distance_km" not in st.session_state: st.session_state.distance_km = 0.0
@@ -120,7 +178,6 @@ def calculer_route(depart, liste_arrivees):
                 
         if len(pts) < 2: return None, None, errs + ["Pas assez d'étapes."], [], []
         
-        # Optimisation OSRM
         coords_str = ";".join([f"{p['lon']},{p['lat']}" for p in pts])
         try:
             rep_trip = requests.get(f"http://router.project-osrm.org/trip/v1/driving/{coords_str}?source=first&roundtrip=true", timeout=10)
@@ -145,11 +202,12 @@ def calculer_route(depart, liste_arrivees):
         for i in range(len(pts) - 1):
             p1, p2 = pts[i], pts[i+1]
             
-            # Demande explicite en français ("language": "fr")
             url_ors = "https://api.openrouteservice.org/v2/directions/driving-hgv/geojson"
+            # Forçage des instructions en français !
             body = {
                 "coordinates": [[p1['lon'], p1['lat']], [p2['lon'], p2['lat']]],
-                "language": "fr"
+                "language": "fr",
+                "instructions": True
             }
             
             rep = requests.post(url_ors, json=body, headers=headers, timeout=10)
@@ -160,18 +218,23 @@ def calculer_route(depart, liste_arrivees):
                 dur = summary["duration"] / 3600.0
                 coords = data["features"][0]["geometry"]["coordinates"]
                 
-                # Récupération sécurisée des instructions détaillées en français
                 steps_list = []
                 try:
                     ors_segments = data["features"][0]["properties"].get("segments", [])
                     for seg_item in ors_segments:
                         for step in seg_item.get("steps", []):
-                            steps_list.append({
-                                "instruction": step.get("instruction", ""),
-                                "dist": step.get("distance", 0) / 1000.0
-                            })
+                            instr = step.get("instruction", "").strip()
+                            if instr:
+                                steps_list.append({
+                                    "instruction": instr,
+                                    "dist": step.get("distance", 0) / 1000.0
+                                })
                 except:
                     pass
+                
+                # Sécurité si l'API ne renvoie aucune instruction
+                if not steps_list:
+                    steps_list.append({"instruction": "Suivre la route principale", "dist": dist})
 
                 tot_dist += dist
                 tot_dur += dur
@@ -202,7 +265,6 @@ def generer_gpx(segments):
 tab1, tab2, tab3 = st.tabs(["📍 Tournée", "💰 Devis & PRK", "🚀 Navigation"])
 
 with tab1:
-    st.markdown("### 1. Encodez vos adresses")
     ville_depart = st.text_input("Départ / Dépôt", "Sint-Pieters-Leeuw")
     
     updated_destinations = []
@@ -220,6 +282,7 @@ with tab1:
         st.session_state.destinations.append("")
         st.rerun()
 
+    st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔍 Calculer & Optimiser", type="primary"):
         if not ORS_API_KEY:
             st.error("⚠️ La clé API OpenRouteService manque dans les paramètres secrets !")
@@ -237,8 +300,6 @@ with tab1:
                     st.error(f"Erreur de calcul : {', '.join(errs)}")
 
 with tab2:
-    st.markdown("### 2. Paramètres & Prix (HTVA)")
-    
     saisie_ttc = st.checkbox("Prix Carburant TTC à la pompe ?", value=config.get("saisie_ttc", True))
     col_d, col_a = st.columns(2)
     prix_diesel_input = col_d.number_input("Diesel (€/L)", value=config.get("prix_diesel", 1.65), step=0.01)
@@ -250,12 +311,11 @@ with tab2:
     type_camion = st.selectbox("Véhicule", ["CE (Tracteur Mercedes)", "C (Porteur)"])
     norme_euro = st.selectbox("Norme EURO", ["Euro 6", "Euro 5"])
     
-    with st.expander("Frais Fixes Mensuels (Leasing, Assurances...)"):
+    with st.expander("Frais Fixes Mensuels"):
         leasing_mensuel = st.number_input("Leasing Mensuel", value=config.get("leasing_mensuel", 0.0), step=100.0)
         assurance_mensuel = st.number_input("Assurances", value=config.get("assurance_mensuel", 0.0), step=50.0)
-        frais_divers = st.number_input("Frais divers (Comptable, GSM, GPS)", value=config.get("abo_mensuel", 0.0), step=50.0)
+        frais_divers = st.number_input("Frais divers", value=config.get("abo_mensuel", 0.0), step=50.0)
 
-    # Remplacement du curseur (slider) par un champ numérique fixe pour éviter les mouvements lors du scroll mobile
     marge_pourcent = st.number_input("Marge souhaitée (%)", min_value=0, max_value=100, value=int(config.get("marge_pourcent", 20)), step=1)
     
     current_config = {
@@ -284,33 +344,27 @@ with tab2:
     facture_htva = prk_total * (1 + (marge_pourcent/100))
     
     st.markdown("---")
-    st.success(f"**💰 À FACTURER : {facture_htva:.2f} € HTVA** (TTC: {facture_htva*1.21:.2f} €)")
+    st.success(f"**💰 À FACTURER : {facture_htva:.2f} € HTVA**")
     
     col1, col2 = st.columns(2)
-    col1.metric("PRK de la course", f"{prk_total:.2f} €")
+    col1.metric("PRK course", f"{prk_total:.2f} €")
     col2.metric("Marge Nette", f"{facture_htva - prk_total:.2f} €")
 
-    # Ajout des détails complets du calcul PRK
-    with st.expander("📊 Voir le détail complet des coûts (PRK)"):
+    with st.expander("📊 Détail du calcul PRK"):
         st.markdown(f"• **Carburant :** {c_carburant:.2f} €")
         st.markdown(f"• **AdBlue :** {c_adblue:.2f} €")
-        st.markdown(f"• **Usure & Pneumatiques :** {c_usure:.2f} €")
-        st.markdown(f"• **Péage (Viapass) :** {c_viapass:.2f} €")
-        st.markdown(f"• **Coût Chauffeur :** {c_chauffeur:.2f} €")
-        st.markdown(f"• **Frais Fixes (Prorata) :** {c_fixes:.2f} €")
+        st.markdown(f"• **Usure/Pneus :** {c_usure:.2f} €")
+        st.markdown(f"• **Péage :** {c_viapass:.2f} €")
+        st.markdown(f"• **Chauffeur :** {c_chauffeur:.2f} €")
+        st.markdown(f"• **Frais Fixes :** {c_fixes:.2f} €")
 
 with tab3:
-    st.markdown("### 🚀 Exporter pour le GPS Camion")
-    
     if not st.session_state.segments:
-        st.info("⚠️ Veuillez d'abord calculer une tournée dans l'onglet 'Tournée'.")
+        st.info("⚠️ Veuillez d'abord calculer une tournée.")
     else:
         gpx_data = generer_gpx(st.session_state.segments)
-        
-        st.markdown("Téléchargez ce fichier de **Trace Exacte** et ouvrez-le avec **MapFactor Navigator** pour un guidage 100% sécurisé Poids Lourd.")
-        
         st.download_button(
-            label="📥 TÉLÉCHARGER LE PARCOURS (Fichier .gpx)",
+            label="📥 TÉLÉCHARGER LE PARCOURS (.gpx)",
             data=gpx_data,
             file_name="Tournee_Camion_2BS.gpx",
             mime="application/gpx+xml",
@@ -318,8 +372,6 @@ with tab3:
         )
         
         st.markdown("---")
-        st.markdown("<div style='font-weight: bold; margin-bottom: 10px;'>Rappel détaillé de la tournée :</div>", unsafe_allow_html=True)
-        
         for i, seg in enumerate(st.session_state.segments):
             dur_h = int(seg.get('dur', 0))
             dur_m = int(round((seg.get('dur', 0) - dur_h) * 60))
@@ -329,18 +381,17 @@ with tab3:
                 f"""
                 <div style='padding: 16px; background: white; color: black; border-radius: 12px; border-left: 12px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);'>
                     <div style='font-weight: bold; margin-bottom: 6px;'>Étape {i+1}</div>
-                    <div style='margin-bottom: 4px;'><b>Départ :</b> {seg['depart']}</div>
-                    <div style='margin-bottom: 6px;'><b>Arrivée :</b> {seg['arrivee']}</div>
+                    <div style='margin-bottom: 4px;'><b>Départ:</b> {seg['depart']}</div>
+                    <div style='margin-bottom: 6px;'><b>Arrivée:</b> {seg['arrivee']}</div>
                     <div style='font-weight: bold; color: #004085; margin-top: 8px;'>
-                        🛣️ {seg['dist']:.1f} km &nbsp;&nbsp;|&nbsp;&nbsp; ⏱️ {dur_str}
+                        🛣️ {seg['dist']:.1f} km &nbsp;|&nbsp; ⏱️ {dur_str}
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
             
-            # Détails pas à pas de l'itinéraire en français
             if seg.get("steps"):
-                with st.expander(f"🔍 Détail de la route (Étape {i+1})"):
+                with st.expander(f"🔍 Détail route (Étape {i+1})"):
                     for step in seg["steps"]:
                         st.markdown(
                             f"""<div style='color: black; margin-bottom: 6px; border-bottom: 1px solid #eee; padding-bottom: 4px;'>
