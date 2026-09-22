@@ -85,13 +85,17 @@ def geocoder(adresse):
     try:
         url = "https://photon.komoot.io/api/"
         params = {"q": adresse, "limit": 1, "lang": "fr"}
-        rep = requests.get(url, params=params, timeout=5)
+        # Ajout d'un User-Agent pour éviter le blocage par l'API Photon
+        headers = {"User-Agent": "2BSTransportApp/1.0"}
+        rep = requests.get(url, params=params, headers=headers, timeout=5)
+        
         if rep.status_code == 200:
             data = rep.json()
             if data and "features" in data and len(data["features"]) > 0:
                 coords = data["features"][0]["geometry"]["coordinates"]
                 return float(coords[0]), float(coords[1])
-    except: pass
+    except Exception as e:
+        print(f"Erreur de géocodage : {e}")
     return None, None
 
 def calculer_route(depart, liste_arrivees):
