@@ -7,24 +7,6 @@ import streamlit as st
 # Configuration pour un affichage optimal sur téléphone
 st.set_page_config(page_title="2BS Transport Mobile", layout="centered", initial_sidebar_state="collapsed")
 
-# --- STYLE CSS GLOBAL POUR AGRANDIR LA POLICE SUR MOBILE ---
-st.markdown("""
-<style>
-    /* Forcer une grande police lisible sur mobile */
-    .route-card, .route-card * {
-        font-size: 21px !important;
-        line-height: 1.5 !important;
-    }
-    .route-title {
-        font-size: 25px !important;
-        font-weight: bold !important;
-    }
-    .step-text {
-        font-size: 18px !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # --- GESTION DE LA CLÉ API SÉCURISÉE ---
 try:
     ORS_API_KEY = st.secrets["ORS_API_KEY"]
@@ -84,7 +66,7 @@ def set_background(image_file):
 
 set_background("Logo 2BS.jpg")
 
-st.markdown("<h2 style='text-align: center;'>🚛 2BS Transport Mobile</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; font-size: 28px;'>🚛 2BS Transport Mobile</h2>", unsafe_allow_html=True)
 
 # Initialisation mémoire
 if "distance_km" not in st.session_state: st.session_state.distance_km = 0.0
@@ -169,8 +151,7 @@ def calculer_route(depart, liste_arrivees):
                         for step in seg_item.get("steps", []):
                             steps_list.append({
                                 "instruction": step.get("instruction", ""),
-                                "dist": step.get("distance", 0) / 1000.0,
-                                "dur": step.get("duration", 0) / 60.0
+                                "dist": step.get("distance", 0) / 1000.0
                             })
                 except:
                     pass
@@ -299,7 +280,7 @@ with tab3:
     else:
         gpx_data = generer_gpx(st.session_state.segments)
         
-        st.markdown("Téléchargez ce fichier de **Trace Exacte** et ouvrez-le avec **MapFactor Navigator** (ou tout autre GPS) pour un guidage 100% sécurisé Poids Lourd.")
+        st.markdown("Téléchargez ce fichier de **Trace Exacte** et ouvrez-le avec **MapFactor Navigator** pour un guidage 100% sécurisé Poids Lourd.")
         
         st.download_button(
             label="📥 TÉLÉCHARGER LE PARCOURS (Fichier .gpx)",
@@ -310,29 +291,34 @@ with tab3:
         )
         
         st.markdown("---")
-        st.markdown("**Rappel détaillé de la tournée :**")
+        st.markdown("<div style='font-size: 22px; font-weight: bold; margin-bottom: 10px;'>Rappel détaillé de la tournée :</div>", unsafe_allow_html=True)
         
         for i, seg in enumerate(st.session_state.segments):
             dur_h = int(seg.get('dur', 0))
             dur_m = int(round((seg.get('dur', 0) - dur_h) * 60))
             dur_str = f"{dur_h}h{dur_m:02d}" if dur_h > 0 else f"{dur_m} min"
             
-            # Carte principale de l'étape en grand format
+            # Bloc principal géant (Styles 100% intégrés pour forcer la taille sur mobile)
             st.markdown(
                 f"""
-                <div class="route-card" style='padding: 16px; background: white; color: black; border-radius: 12px; border-left: 10px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.15);'>
-                    <div class="route-title">Étape {i+1}</div>
-                    <div><b>Départ :</b> {seg['depart']}</div>
-                    <div><b>Arrivée :</b> {seg['arrivee']}</div>
-                    <div style='margin-top: 8px; font-weight: bold; color: #004085;'>
+                <div style='padding: 18px; background: white; color: black; border-radius: 12px; border-left: 12px solid {seg['couleur']}; margin-bottom: 16px; box-shadow: 0px 4px 8px rgba(0,0,0,0.2);'>
+                    <div style='font-size: 24px; font-weight: bold; margin-bottom: 8px;'>Étape {i+1}</div>
+                    <div style='font-size: 20px; margin-bottom: 4px;'><b>Départ :</b> {seg['depart']}</div>
+                    <div style='font-size: 20px; margin-bottom: 8px;'><b>Arrivée :</b> {seg['arrivee']}</div>
+                    <div style='font-size: 20px; font-weight: bold; color: #004085; margin-top: 10px;'>
                         🛣️ {seg['dist']:.1f} km &nbsp;&nbsp;|&nbsp;&nbsp; ⏱️ {dur_str}
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
             
-            # Affichage des instructions détaillées de l'étape dans un expander bien lisible
+            # Détails pas à pas de l'itinéraire
             if seg.get("steps"):
                 with st.expander(f"🔍 Détail de la route (Étape {i+1})"):
                     for step in seg["steps"]:
-                        st.markdown(f"<span class='step-text'>• {step['instruction']} ({step['dist']:.1f} km)</span>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"""<div style='font-size: 18px; color: black; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px;'>
+                                🔹 {step['instruction']} <b style='color: #333;'>({step['dist']:.1f} km)</b>
+                            </div>""", 
+                            unsafe_allow_html=True
+                        )
