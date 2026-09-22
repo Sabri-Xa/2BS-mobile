@@ -209,6 +209,7 @@ with tab1:
                     st.success(f"✅ OK : {dist_calc} km | {st.session_state.h_val}h{st.session_state.m_val:02d}")
                 else:
                     st.error("Erreur lors du calcul (vérifiez vos adresses).")
+
 with tab2:
     st.markdown("### 2. Paramètres & Prix (HTVA)")
     
