@@ -85,17 +85,14 @@ def geocoder(adresse):
     try:
         url = "https://photon.komoot.io/api/"
         params = {"q": adresse, "limit": 1, "lang": "fr"}
-        # Ajout d'un User-Agent pour éviter le blocage par l'API Photon
         headers = {"User-Agent": "2BSTransportApp/1.0"}
         rep = requests.get(url, params=params, headers=headers, timeout=5)
-        
         if rep.status_code == 200:
             data = rep.json()
             if data and "features" in data and len(data["features"]) > 0:
                 coords = data["features"][0]["geometry"]["coordinates"]
                 return float(coords[0]), float(coords[1])
-    except Exception as e:
-        print(f"Erreur de géocodage : {e}")
+    except: pass
     return None, None
 
 def calculer_route(depart, liste_arrivees):
@@ -138,7 +135,6 @@ def calculer_route(depart, liste_arrivees):
         for i in range(len(pts) - 1):
             p1, p2 = pts[i], pts[i+1]
             
-            # Utilisation du endpoint GeoJSON pour récupérer la "Trace Exacte" millimétrée
             url_ors = "https://api.openrouteservice.org/v2/directions/driving-hgv/geojson"
             body = {"coordinates": [[p1['lon'], p1['lat']], [p2['lon'], p2['lat']]]}
             
@@ -147,13 +143,13 @@ def calculer_route(depart, liste_arrivees):
                 data = rep.json()
                 dist = data["features"][0]["properties"]["summary"]["distance"] / 1000.0
                 dur = data["features"][0]["properties"]["summary"]["duration"] / 3600.0
-                coords = data["features"][0]["geometry"]["coordinates"] # La fameuse trace !
+                coords = data["features"][0]["geometry"]["coordinates"]
                 
                 tot_dist += dist
                 tot_dur += dur
                 segs.append({
                     "depart": p1["nom"], "arrivee": p2["nom"],
-                    "dist": dist, "couleur": palette[i % len(palette)],
+                    "dist": dist, "dur": dur, "couleur": palette[i % len(palette)],
                     "coords": coords
                 })
             else:
@@ -162,14 +158,12 @@ def calculer_route(depart, liste_arrivees):
         return round(tot_dist, 1), tot_dur, errs, segs, pts
     except Exception as e: return None, None, [str(e)], [], []
 
-# Fonction magique qui génère le fichier Trace Camion
 def generer_gpx(segments):
     gpx = '<?xml version="1.0" encoding="UTF-8"?>\n'
     gpx += '<gpx version="1.1" creator="2BS Transport" xmlns="http://www.topografix.com/GPX/1/1">\n'
     gpx += '  <trk>\n    <name>Tournee Camion 2BS</name>\n    <trkseg>\n'
     for seg in segments:
         for pt in seg["coords"]:
-            # Format GeoJSON est [longitude, latitude], on doit inverser pour le GPX
             gpx += f'      <trkpt lat="{pt[1]}" lon="{pt[0]}"></trkpt>\n'
     gpx += '    </trkseg>\n  </trk>\n'
     gpx += '</gpx>'
@@ -212,7 +206,6 @@ with tab1:
                     st.session_state.points_valides = pts
                     st.success(f"✅ OK : {dist_calc} km | {st.session_state.h_val}h{st.session_state.m_val:02d}")
                 else:
-                    # Affiche la vraie erreur renvoyée par le code
                     st.error(f"Erreur de calcul : {', '.join(errs)}")
 
 with tab2:
@@ -274,12 +267,10 @@ with tab3:
     if not st.session_state.segments:
         st.info("⚠️ Veuillez d'abord calculer une tournée dans l'onglet 'Tournée'.")
     else:
-        # On génère le contenu du fichier GPX en direct
         gpx_data = generer_gpx(st.session_state.segments)
         
         st.markdown("Téléchargez ce fichier de **Trace Exacte** et ouvrez-le avec **MapFactor Navigator** (ou tout autre GPS) pour un guidage 100% sécurisé Poids Lourd.")
         
-        # Le fameux bouton de téléchargement Streamlit !
         st.download_button(
             label="📥 TÉLÉCHARGER LE PARCOURS (Fichier .gpx)",
             data=gpx_data,
@@ -291,13 +282,19 @@ with tab3:
         st.markdown("---")
         st.markdown("**Rappel de la tournée :**")
         for i, seg in enumerate(st.session_state.segments):
+            dur_h = int(seg.get('dur', 0))
+            dur_m = int(round((seg.get('dur', 0) - dur_h) * 60))
+            dur_str = f"{dur_h}h{dur_m:02d}" if dur_h > 0 else f"{dur_m} min"
+            
             st.markdown(
                 f"""
-                <div style='padding: 10px; background: white; border-radius: 8px; border-left: 6px solid {seg['couleur']}; margin-bottom: 10px; box-shadow: 0px 2px 5px rgba(0,0,0,0.1);'>
-                    <strong>Étape {i+1}</strong> <br>
-                    De : {seg['depart']} <br>
-                    À : <b>{seg['arrivee']}</b> <br>
-                    <small>🛣️ {seg['dist']:.1f} km</small>
+                <div style='padding: 14px; background: white; color: black; border-radius: 10px; border-left: 8px solid {seg['couleur']}; margin-bottom: 12px; box-shadow: 0px 3px 6px rgba(0,0,0,0.15); font-size: 16px;'>
+                    <strong style='font-size: 18px;'>Étape {i+1}</strong> <br>
+                    <b>De :</b> {seg['depart']} <br>
+                    <b>À :</b> {seg['arrivee']} <br>
+                    <div style='margin-top: 6px; font-weight: bold;'>
+                        🛣️ {seg['dist']:.1f} km &nbsp;&nbsp;|&nbsp;&nbsp; ⏱️ {dur_str}
+                    </div>
                 </div>
                 """, unsafe_allow_html=True
             )
